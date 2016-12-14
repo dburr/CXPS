@@ -65,11 +65,35 @@ module.exports = function(Global){
 
   });
 
+  var changenavi = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
+    if (!(typeof requestData.formData.unit_owning_user_id === "number")) { response(403,[]); return; }
+    Global.database().query("SELECT unit_owning_user_id FROM units WHERE deleted=0 AND user_id=:user AND unit_owning_user_id=:unit",{user: requestData.user_id, unit: requestData.formData.unit_owning_user_id}, function(err, ownershipCheck){
+      if (err){
+        log.error(err);
+        response(403, {message: err.message});
+        return;
+      }
+      if (ownershipCheck.length != 1){
+        response(403, {});
+        return;
+      }
+      Global.database().query("UPDATE users SET partner_unit=:unit WHERE user_id=:user;", {user: requestData.user_id, unit: requestData.formData.unit_owning_user_id}, function(err){
+        if (err){
+          log.error(err);
+          response(403, {message: err.message});
+          return;
+        }
+        response(200,[]);
+      });
+    });
+  });
+  
   return new Global.registerModule({
     userinfo: userinfo,
     changename: changename,
     showallitem: showallitem,
-    getnavi: getnavi
+    getnavi: getnavi,
+    changenavi: changenavi
   });
 
 
