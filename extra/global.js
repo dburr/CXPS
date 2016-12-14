@@ -403,6 +403,7 @@ const httpRequestHandler = function(request,response){
     switch(urlSplit[1]){
     case "main.php":{
       if (urlSplit.length >= 3 && request.method === "POST"){
+        if (urlSplit[2] == "download" && urlSplit[3]=="geturl"){ return; }
         mainRequestHandler(request,response, urlSplit[2], urlSplit[3]);
         return;
       }else{
