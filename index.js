@@ -27,7 +27,9 @@ const initialSetup = function(){
   if (!fs.existsSync("./data/db/item.db_")){
     defer.reject("required file 'data/db/item.db_' is missing"); failed = true;
   }
-
+  if (!fs.existsSync("./data/db/exchange.db_")){
+      defer.reject("required file 'data/db/exchange.db_' is missing"); failed = true;
+  }
   if (!fs.existsSync("./data/db/live_notes.db_")){
     defer.reject("required file 'data/db/live_notes.db_' is missing"); failed = true;
   }

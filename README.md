@@ -18,6 +18,7 @@ What is commenting?
   - `unit.db_`
   - `item.db_`
   - `live.db_`
+  - `exchange.db_`
   
 ### Pull Requests
   - If you want to submit a pull request it would be ideal for it to pass eslint checks. I have provided a `.eslintrc.json`
