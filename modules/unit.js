@@ -63,6 +63,29 @@ module.exports = function(Global){
 
   });
 
+  var favorite = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
+    if (!(typeof requestData.formData.unit_owning_user_id === "number")) { response(403,[]); return; }
+    Global.database().query("SELECT unit_owning_user_id FROM units WHERE deleted=0 AND user_id=:user AND unit_owning_user_id=:unit",{user: requestData.user_id, unit: requestData.formData.unit_owning_user_id}, function(err, ownershipCheck){
+      if (err){
+        log.error(err);
+        response(403, {message: err.message});
+        return;
+      }
+      if (ownershipCheck.length != 1){
+        response(403, {});
+        return;
+      }
+      Global.database().query("UPDATE units SET favorite_flag=:fav WHERE unit_owning_user_id=:unit", {unit: requestData.formData.unit_owning_user_id, fav: (requestData.formData.favorite_flag===1?1:0)}, function(err){
+        if (err){
+          log.error(err);
+          response(403, {message: err.message});
+          return;
+        }
+        response(200, []);
+      });
+    });
+  });
+
   var supporterall = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
     response(200, {unit_support_list:[]});
   });
@@ -77,6 +100,7 @@ module.exports = function(Global){
     unitall: unitall,
     deckinfo: deckinfo,
     supporterall: supporterall,
-    removableskillinfo: removableskillinfo
+    removableskillinfo: removableskillinfo,
+    favorite: favorite
   });
 };
