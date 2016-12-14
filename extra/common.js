@@ -134,6 +134,32 @@ VALUES (:user_id, :unit_id, :exp, :next_exp, :level, :max_level,:rank, :max_rank
 
     return defer.promise;
   };
+
+
+  const getUserInfo = function(user_id, values) {
+    var defer = Q.defer();
+    Global.database().query("SELECT * FROM users WHERE user_id=:user;",{user:user_id}, function(err,rows){
+      if (err){ log.error(err); defer.reject(err); return; }
+      if (rows.length != 1){ defer.reject(new Error("User not Found")); }
+
+      var response = {};
+      var u = rows[0];
+
+      if (!(typeof values === "object" && Array.isArray(values) && values.length>=1)){
+        defer.resolve(u);
+        return;
+      }
+      var keys = Object.keys(rows[0]);
+      for (var i=0;i<keys.length;i++){
+        if (values.includes(keys[i])){
+          response[keys[i]] = u[keys[i]];
+        }
+      }
+      defer.resolve(response);
+    });
+    return defer.promise;
+  };
+
   const userUpdateAlbum = function(user_id, unit_id, rank_max, love_max, level_max, love, addLove, addFavPt){
     var defer = Q.defer();
 
@@ -255,6 +281,17 @@ VALUES (:user_id, :unit_id, :exp, :next_exp, :level, :max_level,:rank, :max_rank
     return data;
   };
 
+  const getRemovableSkillInfo = function(user_id){
+    log.warn(user_id,"getRemovableSkillInfo");
+    var defer = Q.defer();
+    defer.resolve({
+      owning_info: [],
+      equipment_info: []
+    });
+
+    return defer.promise;
+  };
+
   const COMMANDS = {
     u: function(){
       COMMANDS.useraddunit.apply(null,arguments);
@@ -302,7 +339,9 @@ VALUES (:user_id, :unit_id, :exp, :next_exp, :level, :max_level,:rank, :max_rank
     userAddMultiUnit: userAddMultiUnit,
     userUpdateAlbum: userUpdateAlbum,
     parseDate: parseDate,
-    parseUnitData: parseUnitData
+    parseUnitData: parseUnitData,
+    getUserInfo: getUserInfo,
+    getRemovableSkillInfo: getRemovableSkillInfo
   };
 
 

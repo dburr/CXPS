@@ -123,6 +123,7 @@ module.exports = function(Global){
       }
 
       var total_sale_price = 0;
+      var sale_detail = [];
       var total_sale_seals = {
         "2": 0,
         "3": 0,
@@ -136,6 +137,11 @@ module.exports = function(Global){
 
         unitDB.get("SELECT U.rarity, L.sale_price FROM unit_m as U JOIN unit_level_up_pattern_m as L ON L.unit_level_up_pattern_id = U.unit_level_up_pattern_id WHERE U.unit_id=? AND L.unit_level=?;",[n.unit_id, n.level], function(err,row){
           total_sale_price += parseInt(row.sale_price);
+          sale_detail.push({
+            unit_owning_user_id: n.unit_owning_user_id,
+            unit_id: n.unit_id,
+            price: parseInt(row.sale_price)
+          });
           log.verbose(row);
           if (typeof total_sale_seals[row.rarity.toString()] === "number" && (!noExchangePointList.includes(n.unit_id))){
             total_sale_seals[row.rarity.toString()] += parseInt(1);
@@ -158,28 +164,53 @@ module.exports = function(Global){
           });
           return 0;
         };
-        Global.database().beginTransaction(function(err){
-          if (err){return error(err);}
-          Global.database().query("UPDATE units SET deleted=1 WHERE unit_owning_user_id IN (:uouids);", {uouids: sale_list}, function(err){
+
+        Global.common().getUserInfo(requestData.user_id, ["level","exp","next_exp","game_coin","sns_coin","social_point","unit_max","energy_max","friend_max"]).then(function(before_user_info){
+          Global.database().beginTransaction(function(err){
             if (err){return error(err);}
-            Global.database().query("UPDATE users SET game_coin=game_coin+:coin WHERE user_id=:user",{coin: total_sale_price, user: requestData.user_id}, function(err){
+            Global.database().query("DELETE FROM units WHERE unit_owning_user_id IN (:uouids);", {uouids: sale_list}, function(err){
               if (err){return error(err);}
-              Global.database().query("INSERT INTO user_exchange_point VALUES (:user,2,:s2),(:user,3,:s3),(:user,4,:s4),(:user,5,:s5) ON DUPLICATE KEY UPDATE excange_point=exchange_point+VALUES(exchange_point);",{
-                user: requestData.user_id,
-                s2: total_sale_seals["2"],
-                s3: total_sale_seals["3"],
-                s4: total_sale_seals["4"],
-                s5: total_sale_seals["5"]
-              }, function(err){
+              Global.database().query("UPDATE users SET game_coin=game_coin+:coin WHERE user_id=:user",{coin: total_sale_price, user: requestData.user_id}, function(err){
                 if (err){return error(err);}
-                Global.database().commit(function(err){
+                Global.database().query("INSERT INTO user_exchange_point VALUES (:user,2,:s2),(:user,3,:s3),(:user,4,:s4),(:user,5,:s5) ON DUPLICATE KEY UPDATE exchange_point=exchange_point+VALUES(exchange_point);",{
+                  user: requestData.user_id,
+                  s2: total_sale_seals["2"],
+                  s3: total_sale_seals["3"],
+                  s4: total_sale_seals["4"],
+                  s5: total_sale_seals["5"]
+                }, function(err){
                   if (err){return error(err);}
-                  log.verbose("Done Good");
+                  Global.database().commit(function(err){
+                    if (err){return error(err);}
+                    Global.common().getUserInfo(requestData.user_id, ["level","exp","next_exp","game_coin","sns_coin","social_point","unit_max","energy_max","friend_max"]).then(function(after_user_info){
+                      Global.common().getRemovableSkillInfo(requestData.user_id).then(function(removableskillinfo){
+                        var get_exchange_point_list = [];
+                        if (total_sale_seals["2"]>0) get_exchange_point_list.push({rarity: 2, exchange_point: total_sale_seals["2"]});
+                        if (total_sale_seals["3"]>0) get_exchange_point_list.push({rarity: 3, exchange_point: total_sale_seals["3"]});
+                        if (total_sale_seals["4"]>0) get_exchange_point_list.push({rarity: 4, exchange_point: total_sale_seals["4"]});
+                        if (total_sale_seals["5"]>0) get_exchange_point_list.push({rarity: 5, exchange_point: total_sale_seals["5"]});
+                        var responseData = {
+                          total: total_sale_price,
+                          detail: sale_detail,
+                          before_user_info: before_user_info,
+                          after_user_info: after_user_info,
+                          reward_box_flag: false,
+                          get_exchange_point_list: get_exchange_point_list,
+                          unit_removable_skill: removableskillinfo
+                        };
+                        response(200, responseData);
+                      });
+                    });
+
+
+                  });
                 });
               });
             });
           });
         });
+
+
       });
     });
   });
