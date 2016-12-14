@@ -2,7 +2,7 @@ module.exports = function(Global){
   var log = new Global.Log.create(Global.Config().log.level, "Module: Unit");
   var unitall = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
 
-    Global.database().query("SELECT * FROM units WHERE user_id=:user",{user: requestData.user_id}, function(err, data){
+    Global.database().query("SELECT * FROM units WHERE user_id=:user AND removed=0",{user: requestData.user_id}, function(err, data){
       if (err){
         log.error(err);
         response(403, []);
