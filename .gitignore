@@ -1,0 +1,4 @@
+node_modules/*
+*.db_
+!live_notes.db_
+config.json

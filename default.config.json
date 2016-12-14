@@ -1,0 +1,18 @@
+{
+  "database": {
+    "connection": {
+      "host": "",
+      "user": "",
+      "password": "",
+      "database": ""
+    }
+  },
+  "hmac_key": "",
+  "log": {
+    "level": 5
+  },
+  "server": {
+	"hostname": "127.0.0.1",
+	"port": 8080
+  }
+}
