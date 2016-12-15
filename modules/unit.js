@@ -98,10 +98,13 @@ module.exports = function(Global){
     response(200, {unit_support_list:[]});
   });
   var removableskillinfo = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
-    response(200, {
-      owning_info: [],
-      equipment_info: []
+    Global.common().getRemovableSkillInfo(requestData.user_id).then(function(skillInfo){
+      response(200, skillInfo);
+    }).catch(function(e){
+      log.error(e);
+      response(403, {message: e.message});
     });
+
   });
 
   var sale = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
@@ -215,12 +218,131 @@ module.exports = function(Global){
     });
   });
 
+  var deck = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
+    if (!(typeof requestData.formData.unit_deck_list === "object" && Array.isArray(requestData.formData.unit_deck_list))){
+      response(403,[]);
+      return;
+    }
+    var decks = [];
+    var usedDeckIDs = [];
+
+    try {
+      var hasMainDeck = false;
+      var allUnits = [];
+      for (var i=0;i<requestData.formData.unit_deck_list.length;i++){
+        var d = requestData.formData.unit_deck_list[i];
+        if (typeof d.unit_deck_id != "number") { response(403, []); return; }
+        if (typeof d.deck_name != "string") { response(403, []); return; }
+        if (typeof d.main_flag != "number") { response(403, []); return; }
+        if (!(typeof d.unit_deck_detail === "object" && Array.isArray(d.unit_deck_detail))) { response(403, []); return; }
+        if (![1,2,3,4,5,6,7,8,9].includes(d.unit_deck_id)){ response(403,[]); return;}
+        if (usedDeckIDs.includes(d.unit_deck_id)){ response(403,[]); return;}
+        usedDeckIDs.push(d.unit_deck_id);
+        if (d.deck_name.length > 10) { response(403,[]); return; }
+        if (d.main_flag == 1){
+          if (hasMainDeck) {response(403,[]); return; }
+          if (d.unit_deck_detail.length != 9) { response(403,[]); return; }
+          hasMainDeck = true;
+        }
+        if (d.unit_deck_detail.length > 9) { response(403,[]); return; }
+        var usedPositions = [];
+        var usedUnitIDs = [];
+        for (var j=0;j<d.unit_deck_detail.length;j++){
+          var s = d.unit_deck_detail[j];
+          if (typeof s.position != "number") {response(403,[]); return;}
+          if (typeof s.unit_owning_user_id != "number") {response(403,[]); return;}
+          if (s.position != parseInt(s.position)){response(403,[]); return;}
+          if (s.unit_owning_user_id != parseInt(s.unit_owning_user_id)){response(403,[]); return;}
+          if (usedPositions.includes(s.position)){response(403,[]); return;}
+          usedPositions.push(s.position);
+          if (usedUnitIDs.includes(s.unit_owning_user_id)){response(403,[]); return;}
+          usedUnitIDs.push(s.unit_owning_user_id);
+          if (!allUnits.includes(s.unit_owning_user_id)){allUnits.push(s.unit_owning_user_id);}
+        }
+        decks.push(d);
+      }
+    } catch (e){
+      response(403,[]);
+      log.error(e);
+      return;
+    }
+
+    if (!hasMainDeck){
+      response(403, []);
+      return;
+    }
+
+    Global.database().query("SELECT unit_owning_user_id FROM units WHERE user_id=:user AND deleted=0 AND unit_owning_user_id IN (:units) ;",{user: requestData.user_id, units:allUnits}, function(err, unitCheckList){
+      if (err){
+        log.debug(this.sql);
+        log.error(err);
+        response(403, []);
+        return;
+      }
+      if (unitCheckList.length != allUnits.length){
+        response(403,[]);
+        return;
+      }
+
+      var error = function(err,sql){
+        log.error(err);
+        if (sql) log.debug(sql);
+        Global.database().rollback(function(){
+          response(403, {message: err.message});
+        });
+      };
+      Global.database().beginTransaction(function(err){
+        if (err) return error(err);
+        Global.database().query("DELETE FROM user_unit_deck WHERE user_id=:user",{user: requestData.user_id}, function(err){
+          if (err) return error(err,this.sql);
+          var tempDeckList = decks.slice();
+          var insertNextDeck = function(callback){
+            let next = tempDeckList.shift();
+            if (!next){callback(); return; }
+            Global.database().query("INSERT INTO user_unit_deck VALUES (:user, :deck, :name);",{user: requestData.user_id, deck: next.unit_deck_id, name: next.deck_name}, function(err){
+              if (err) return error(err, this.sql);
+              var insertNextUnit = function(unitCallback){
+                var nextu = next.unit_deck_detail.shift();
+                if (!nextu) return unitCallback();
+                Global.database().query("INSERT INTO user_unit_deck_slot VALUES (:user, :deck, :slot, :unit)",{user: requestData.user_id, deck: next.unit_deck_id, slot: nextu.position, unit: nextu.unit_owning_user_id}, function(err){
+                  if (err) return error(err.this.sql);
+                  insertNextUnit(unitCallback);
+                });
+              };
+              insertNextUnit(function(){insertNextDeck(callback);});
+            });
+          };
+
+          insertNextDeck(function(){
+
+            Global.database().commit(function(err){
+              if (err) return error(err);
+              response(200,[]);
+            });
+
+
+          });
+
+
+
+
+        });
+      });
+
+
+    });
+
+
+  });
+
+
   return new Global.registerModule({
     unitall: unitall,
     deckinfo: deckinfo,
     supporterall: supporterall,
     removableskillinfo: removableskillinfo,
     favorite: favorite,
-    sale: sale
+    sale: sale,
+    deck: deck
   });
 };

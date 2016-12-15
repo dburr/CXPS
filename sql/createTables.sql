@@ -200,6 +200,26 @@ CREATE TABLE IF NOT EXISTS `user_unit_deck_slot` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Data exporting was unselected.
+-- Dumping structure for table cxps.user_unit_removable_skill_equip
+CREATE TABLE IF NOT EXISTS `user_unit_removable_skill_equip` (
+  `unit_owning_user_id` int(10) unsigned NOT NULL,
+  `unit_removable_skill_id` tinyint(2) unsigned NOT NULL,
+  PRIMARY KEY (`unit_owning_user_id`,`unit_removable_skill_id`),
+  CONSTRAINT `fk_removable_skill_equip_unit` FOREIGN KEY (`unit_owning_user_id`) REFERENCES `units` (`unit_owning_user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- Data exporting was unselected.
+-- Dumping structure for table cxps.user_unit_removable_skill_owning
+CREATE TABLE IF NOT EXISTS `user_unit_removable_skill_owning` (
+  `user_id` int(10) unsigned NOT NULL,
+  `unit_removable_skill_id` tinyint(2) unsigned NOT NULL,
+  `total_amount` smallint(4) unsigned DEFAULT '0',
+  `insert_date` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`,`unit_removable_skill_id`),
+  CONSTRAINT `fk_removable_skill_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- Data exporting was unselected.
 -- Dumping structure for view cxps.v_units_not_locked
 -- Creating temporary table to overcome VIEW dependency errors
 CREATE TABLE `v_units_not_locked` (
@@ -209,10 +229,25 @@ CREATE TABLE `v_units_not_locked` (
 	`unit_id` SMALLINT(5) UNSIGNED NOT NULL
 ) ENGINE=MyISAM;
 
+-- Dumping structure for view cxps.v_user_unit_removable_skill_owning
+-- Creating temporary table to overcome VIEW dependency errors
+CREATE TABLE `v_user_unit_removable_skill_owning` (
+	`user_id` INT(10) UNSIGNED NOT NULL,
+	`unit_removable_skill_id` TINYINT(2) UNSIGNED NOT NULL,
+	`total_amount` SMALLINT(4) UNSIGNED NULL,
+	`equipped_amount` BIGINT(21) NULL,
+	`insert_date` DATETIME NULL
+) ENGINE=MyISAM;
+
 -- Dumping structure for view cxps.v_units_not_locked
 -- Removing temporary table and create final VIEW structure
 DROP TABLE IF EXISTS `v_units_not_locked`;
 CREATE ALGORITHM=UNDEFINED DEFINER=`cxps`@`localhost` SQL SECURITY DEFINER VIEW `v_units_not_locked` AS select `units`.`unit_owning_user_id` AS `unit_owning_user_id`,`units`.`user_id` AS `user_id`,`units`.`level` AS `level`,`units`.`unit_id` AS `unit_id` from `units` where ((not(`units`.`unit_owning_user_id` in (select `s`.`unit_owning_user_id` from (`user_unit_deck_slot` `s` join `users` `u` on(((`u`.`user_id` = `s`.`user_id`) and (`u`.`main_deck` = `s`.`deck_id`)))) where (`u`.`user_id` = `units`.`user_id`)))) and (not(`units`.`unit_owning_user_id` in (select `users`.`partner_unit` from `users` where (`users`.`user_id` = `units`.`user_id`)))) and (`units`.`favorite_flag` = 0) and (`units`.`deleted` = 0));
+
+-- Dumping structure for view cxps.v_user_unit_removable_skill_owning
+-- Removing temporary table and create final VIEW structure
+DROP TABLE IF EXISTS `v_user_unit_removable_skill_owning`;
+CREATE ALGORITHM=UNDEFINED DEFINER=`cxps`@`localhost` SQL SECURITY DEFINER VIEW `v_user_unit_removable_skill_owning` AS select `o`.`user_id` AS `user_id`,`o`.`unit_removable_skill_id` AS `unit_removable_skill_id`,`o`.`total_amount` AS `total_amount`,(select count(0) from (`user_unit_removable_skill_equip` `e` join `units` on((`units`.`unit_owning_user_id` = `e`.`unit_owning_user_id`))) where ((`e`.`unit_removable_skill_id` = `o`.`unit_removable_skill_id`) and (`units`.`user_id` = `o`.`user_id`))) AS `equipped_amount`,`o`.`insert_date` AS `insert_date` from `user_unit_removable_skill_owning` `o`;
 
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
 /*!40014 SET FOREIGN_KEY_CHECKS=IF(@OLD_FOREIGN_KEY_CHECKS IS NULL, 1, @OLD_FOREIGN_KEY_CHECKS) */;

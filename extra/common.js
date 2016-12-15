@@ -238,12 +238,12 @@ VALUES (:user_id, :unit_id, :exp, :next_exp, :level, :max_level,:rank, :max_rank
 
   const parseDate = function(value, second){
     if (typeof value === "number" || value instanceof Date){
-      if (second) value = Math.floor(value*1000);
+      if (typeof value === "number" && second) value = Math.floor(value*1000);
       var d;
       if (typeof value === "number") d = new Date(value);
       if (value instanceof Date) d = value;
       var YYYY = ("000" + d.getFullYear()).substr(-4);
-      var MM = ("0" + d.getMonth()).substr(-2);
+      var MM = ("0" + (d.getMonth()+1)).substr(-2);
       var DD = ("0" + d.getDate()).substr(-2);
       var HH = ("0" + d.getHours()).substr(-2);
       var mm = ("0" + d.getMinutes()).substr(-2);
@@ -282,13 +282,28 @@ VALUES (:user_id, :unit_id, :exp, :next_exp, :level, :max_level,:rank, :max_rank
   };
 
   const getRemovableSkillInfo = function(user_id){
-    log.warn(user_id,"getRemovableSkillInfo");
     var defer = Q.defer();
-    defer.resolve({
-      owning_info: [],
-      equipment_info: []
+    Global.database().query("SELECT unit_removable_skill_id,total_amount,equipped_amount,insert_date FROM v_user_unit_removable_skill_owning WHERE user_id=:user",{user: user_id}, function(err, skillOwning){
+      if (err){ defer.reject(err); return; }
+      Global.database().query("SELECT e.unit_owning_user_id, unit_removable_skill_id FROM user_unit_removable_skill_equip as e JOIN units as u ON e.unit_owning_user_id=u.unit_owning_user_id WHERE user_id=:user;",{user: user_id}, function(err,equipInfo){
+        if (err){ log.error(err); defer.reject(err); return; }
+        var response = {
+          owning_info: skillOwning,
+          equipment_info: {}
+        };
+        for (var i=0;i<equipInfo.length;i++){
+          var e = equipInfo[i];
+          if (!response.equipment_info[e.unit_owning_user_id]){
+            response.equipment_info[e.unit_owning_user_id] = {
+              unit_owning_user_id: e.unit_owning_user_id,
+              detail: []
+            };
+          }
+          response.equipment_info[e.unit_owning_user_id].detail.push({unit_removable_skill_id: e.unit_removable_skill_id});
+        }
+        defer.resolve(response);
+      });
     });
-
     return defer.promise;
   };
 
@@ -326,6 +341,27 @@ VALUES (:user_id, :unit_id, :exp, :next_exp, :level, :max_level,:rank, :max_rank
         log.always("                            ^ (prefix id with 'n' to use unit_number)","Command Usage");
       }
 
+    },
+    giveallskills: function(){
+      try {
+        if (arguments.length < 1) throw new Error("Not Enough Arguments");
+        if (isNaN(arguments[0])) throw new Error("Invalid Argument");
+        arguments[0] = parseInt(arguments[0]);
+        var insertArray = [];
+        for (var i=1;i<=39;i++){
+          insertArray.push("(" + arguments[0] + "," + i + ", 100)");
+        }
+        Global.database().query("DELETE FROM user_unit_removable_skill_owning WHERE user_id=:user",{user: arguments[0]}, function(err){
+          if (err){log.error(err); return;}
+          Global.database().query("INSERT INTO user_unit_removable_skill_owning (user_id, unit_removable_skill_id, total_amount) VALUES " + insertArray.join(",") + ";",function(err){
+            if (err){log.error(err); return;}
+            log.always("Done","giveallskills");
+          });
+        });
+      } catch (e){
+        log.warn(e.message);
+        log.always("giveallskills {user_id:int}","Command Usage");
+      }
     }
   };
 
