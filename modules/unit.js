@@ -417,6 +417,23 @@ module.exports = function(Global){
     });
   });
 
+  var setdisplayrank = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
+    if (!(requestData.formData.display_rank === 1 || requestData.formData.display_rank === 2)) return response(403,{});
+    if (!(typeof requestData.formData.unit_owning_user_id === "number" && parseInt(requestData.formData.unit_owning_user_id)===requestData.formData.unit_owning_user_id)) return response(403,{});
+    Global.database().query("SELECT rank,max_rank,unit_owning_user_id FROM units WHERE user_id=:user AND unit_owning_user_id=:unit", {user: requestData.user_id, unit: requestData.formData.unit_owning_user_id}, function(err, unit){
+      if (err){log.error(err); return response(403,{message: err.message});}
+      log.debug(this.sql);
+      if (!unit || unit.length==0) return response(403,{message: "unit not found"});
+      unit = unit[0];
+      log.debug(unit);
+      if (requestData.formData.display_rank > unit.rank) return response(403,{message: "illegal rank"});
+      Global.database().query("UPDATE units SET display_rank=:rank WHERE unit_owning_user_id=:unit",{unit: unit.unit_owning_user_id, rank: requestData.formData.display_rank}, function(err){
+        if (err){log.error(err); return response(403,{});}
+        response(200,{});
+      });
+    });
+  });
+
 
   return new Global.registerModule({
     unitall: unitall,
@@ -426,6 +443,7 @@ module.exports = function(Global){
     favorite: favorite,
     sale: sale,
     deck: deck,
-    rankup: rankup
+    rankup: rankup,
+    setdisplayrank: setdisplayrank
   });
 };
