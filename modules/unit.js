@@ -217,6 +217,103 @@ module.exports = function(Global){
       });
     });
   });
+  var rankup = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
+    var error = function(err, doLog, extra){
+      Global.database().rollback();
+      if (doLog) log.error(err);
+      if (extra) log.debug(extra);
+      response(403, {message: err.message});
+    };
+    try {
+      if (!(typeof requestData.formData.unit_owning_user_ids === "object" && Array.isArray(requestData.formData.unit_owning_user_ids)) && requestData.formData.unit_owning_user_ids.length == 1) throw new Error("Invalid Request");
+      if (!(typeof requestData.formData.unit_owning_user_ids[0] === "number" && parseInt(requestData.formData.unit_owning_user_ids[0])==requestData.formData.unit_owning_user_ids[0])) throw new Error("Invalid Request");
+      if (!(typeof requestData.formData.base_owning_unit_user_id === "number" && parseInt(requestData.formData.base_owning_unit_user_id)==requestData.formData.base_owning_unit_user_id)) throw new Error("Invalid Request");
+      if(requestData.formData.base_owning_unit_user_id == requestData.formData.unit_owning_user_ids[0]) throw new Error("Nope.");
+      Global.database().query("SELECT * FROM v_units_not_locked WHERE user_id=:user AND unit_owning_user_id IN (:units)",{user: requestData.user_id, units: [requestData.formData.unit_owning_user_ids[0]]}, function(err, sacrificeUnit){
+        if (err) return error(err, true, this.sql);
+        if (sacrificeUnit.length != 1) return error(new Error("Can't sacrifice that card."));
+        sacrificeUnit = sacrificeUnit[0];
+        Global.database().query("SELECT * FROM units WHERE user_id=:user AND unit_owning_user_id=:unit AND deleted=0;",{user: requestData.user_id, unit: requestData.formData.base_owning_unit_user_id}, function(err,baseUnit){
+          if (err) return error(err, true, this.sql);
+          if (baseUnit.length != 1) return error(new Error("That card is not available."));
+          baseUnit = baseUnit[0];
+          if (sacrificeUnit.unit_id != baseUnit.unit_id) return error(new Error("Not Same Unit"));
+          log.verbose(baseUnit);
+          if (baseUnit.rank >= baseUnit.max_rank && baseUnit.removable_skill_capacity>=baseUnit.max_removable_skill_capacity){
+            return error(new Error("Card Already Maxed"),false);
+          }
+
+          unitDB.get("SELECT rank_up_cost, disable_rank_up, after_love_max, after_level_max FROM unit_m WHERE unit_id=?",[baseUnit.unit_id], function(err, baseUnitData){
+            if (err) return error(err, true);
+            if (!baseUnitData) return error(new Error("Failed to find unit data [" + baseUnit.unit_id + "]"), true);
+
+            if (baseUnitData.disable_rank_up > 0) return error(new Error("That unit cannot be ranked up."));
+
+            Global.common().getUserInfo(requestData.user_id).then(function(beforeUserInfo){
+              if (beforeUserInfo.game_coin < baseUnitData.rank_up_cost) return error(new Error("Not Enough Coin"));
+
+              var gainSlots = 1;
+              if (baseUnit.rank>=baseUnit.max_rank){ gainSlots+=1; }
+
+              Global.database().beginTransaction(function(err){
+                if (err) return error(err, true);
+
+                Global.database().query("UPDATE units SET rank=max_rank,display_rank=max_rank,removable_skill_capacity=:skillcap, max_love=:maxlove, max_level=:maxlevel WHERE unit_owning_user_id=:unit",{
+                  unit: baseUnit.unit_owning_user_id,
+                  skillcap: Math.min(baseUnit.max_removable_skill_capacity, baseUnit.removable_skill_capacity+gainSlots),
+                  maxlove: baseUnitData.after_love_max,
+                  maxlevel: baseUnitData.after_level_max
+                },function(err){
+                  if (err) return error(err, true, this.sql);
+                  Global.database().query("DELETE FROM units WHERE unit_owning_user_id=:unit", {unit: sacrificeUnit.unit_owning_user_id}, function(err){
+                    if (err) return error(err, true, this.sql);
+                    Global.database().query("UPDATE users SET game_coin=game_coin-:cost WHERE user_id=:user", {cost: baseUnitData.rank_up_cost, user: requestData.user_id}, function(err){
+                      if (err) return error(err, true, this.sql);
+                      Global.common().userUpdateAlbum(requestData.user_id, baseUnit.unit_id, true, false, false, 0, 0, 0).then(function(){
+                        Global.database().commit(function(err){
+                          if (err) return error(err,true);
+
+                          Global.database().query("SELECT * FROM units WHERE unit_owning_user_id=:unit",{unit:baseUnit.unit_owning_user_id}, function(err, afterUnitInfo){
+                            if (err) return error(err,true, this.sql);
+                            log.verbose(afterUnitInfo);
+                            Global.common().getUserInfo(requestData.user_id).then(function(afterUserInfo){
+                              Global.common().getRemovableSkillInfo(requestData.user_id).then(function(removableSkillInfo){
+                                var responseData = {
+                                  before: Global.common().parseUnitData(baseUnit),
+                                  after: Global.common().parseUnitData(afterUnitInfo[0]),
+                                  before_user_info: beforeUserInfo,
+                                  after_user_info: afterUserInfo,
+                                  user_game_coin: baseUnitData.rank_up_cost,
+                                  open_subscenario_id: null,
+                                  get_exchange_point_list: [],
+                                  unit_removable_skill: removableSkillInfo
+                                };
+                                response(200, responseData);
+                              });
+                            });
+                          });
+                        });
+                      }).catch(function(err){
+                        error(err, true);
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+
+
+
+
+
+    } catch (e){
+      error(e);
+    }
+
+  });
 
   var deck = new Global.registerAction(Global.CONSTANT.AUTH.CONFIRMED_USER, Global.CONSTANT.REQUEST_TYPE.BOTH, function(requestData, response){
     if (!(typeof requestData.formData.unit_deck_list === "object" && Array.isArray(requestData.formData.unit_deck_list))){
@@ -266,12 +363,10 @@ module.exports = function(Global){
       log.error(e);
       return;
     }
-
     if (!hasMainDeck){
       response(403, []);
       return;
     }
-
     Global.database().query("SELECT unit_owning_user_id FROM units WHERE user_id=:user AND deleted=0 AND unit_owning_user_id IN (:units) ;",{user: requestData.user_id, units:allUnits}, function(err, unitCheckList){
       if (err){
         log.debug(this.sql);
@@ -283,7 +378,6 @@ module.exports = function(Global){
         response(403,[]);
         return;
       }
-
       var error = function(err,sql){
         log.error(err);
         if (sql) log.debug(sql);
@@ -312,27 +406,15 @@ module.exports = function(Global){
               insertNextUnit(function(){insertNextDeck(callback);});
             });
           };
-
           insertNextDeck(function(){
-
             Global.database().commit(function(err){
               if (err) return error(err);
               response(200,[]);
             });
-
-
           });
-
-
-
-
         });
       });
-
-
     });
-
-
   });
 
 
@@ -343,6 +425,7 @@ module.exports = function(Global){
     removableskillinfo: removableskillinfo,
     favorite: favorite,
     sale: sale,
-    deck: deck
+    deck: deck,
+    rankup: rankup
   });
 };
