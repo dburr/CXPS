@@ -161,6 +161,16 @@ CREATE TABLE IF NOT EXISTS `user_login` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 
 -- Data exporting was unselected.
+-- Dumping structure for table cxps.user_support_unit
+CREATE TABLE IF NOT EXISTS `user_support_unit` (
+  `user_id` int(10) unsigned NOT NULL,
+  `unit_id` smallint(5) unsigned NOT NULL,
+  `amount` smallint(3) unsigned NOT NULL DEFAULT '0',
+  PRIMARY KEY (`user_id`,`unit_id`),
+  CONSTRAINT `fk_support_unit_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+
+-- Data exporting was unselected.
 -- Dumping structure for table cxps.user_unit_album
 CREATE TABLE IF NOT EXISTS `user_unit_album` (
   `user_id` int(10) unsigned NOT NULL,
@@ -226,7 +236,8 @@ CREATE TABLE `v_units_not_locked` (
 	`unit_owning_user_id` INT(10) UNSIGNED NOT NULL,
 	`user_id` INT(10) UNSIGNED NOT NULL,
 	`level` TINYINT(3) UNSIGNED NOT NULL,
-	`unit_id` SMALLINT(5) UNSIGNED NOT NULL
+	`unit_id` SMALLINT(5) UNSIGNED NOT NULL,
+	`unit_skill_level` TINYINT(1) UNSIGNED NOT NULL
 ) ENGINE=MyISAM;
 
 -- Dumping structure for view cxps.v_user_unit_removable_skill_owning
@@ -242,7 +253,7 @@ CREATE TABLE `v_user_unit_removable_skill_owning` (
 -- Dumping structure for view cxps.v_units_not_locked
 -- Removing temporary table and create final VIEW structure
 DROP TABLE IF EXISTS `v_units_not_locked`;
-CREATE ALGORITHM=UNDEFINED DEFINER=`cxps`@`localhost` SQL SECURITY DEFINER VIEW `v_units_not_locked` AS select `units`.`unit_owning_user_id` AS `unit_owning_user_id`,`units`.`user_id` AS `user_id`,`units`.`level` AS `level`,`units`.`unit_id` AS `unit_id` from `units` where ((not(`units`.`unit_owning_user_id` in (select `s`.`unit_owning_user_id` from (`user_unit_deck_slot` `s` join `users` `u` on(((`u`.`user_id` = `s`.`user_id`) and (`u`.`main_deck` = `s`.`deck_id`)))) where (`u`.`user_id` = `units`.`user_id`)))) and (not(`units`.`unit_owning_user_id` in (select `users`.`partner_unit` from `users` where (`users`.`user_id` = `units`.`user_id`)))) and (`units`.`favorite_flag` = 0) and (`units`.`deleted` = 0));
+CREATE ALGORITHM=UNDEFINED DEFINER=`cxps`@`localhost` SQL SECURITY DEFINER VIEW `v_units_not_locked` AS select `units`.`unit_owning_user_id` AS `unit_owning_user_id`,`units`.`user_id` AS `user_id`,`units`.`level` AS `level`,`units`.`unit_id` AS `unit_id`,`units`.`unit_skill_level` AS `unit_skill_level` from `units` where ((not(`units`.`unit_owning_user_id` in (select `s`.`unit_owning_user_id` from (`user_unit_deck_slot` `s` join `users` `u` on(((`u`.`user_id` = `s`.`user_id`) and (`u`.`main_deck` = `s`.`deck_id`)))) where (`u`.`user_id` = `units`.`user_id`)))) and (not(`units`.`unit_owning_user_id` in (select `users`.`partner_unit` from `users` where (`users`.`user_id` = `units`.`user_id`)))) and (`units`.`favorite_flag` = 0) and (`units`.`deleted` = 0));
 
 -- Dumping structure for view cxps.v_user_unit_removable_skill_owning
 -- Removing temporary table and create final VIEW structure
