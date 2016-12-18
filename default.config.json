@@ -1,11 +1,9 @@
 {
   "database": {
-    "connection": {
-      "host": "",
-      "user": "",
-      "password": "",
-      "database": ""
-    }
+    "host": "",
+    "user": "",
+    "password": "",
+    "database": ""
   },
   "hmac_key": "",
   "log": {

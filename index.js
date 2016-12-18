@@ -12,7 +12,7 @@ const initialSetup = function(){
   if (c.hmac_key.length == 0){
     log.warn("Warning: HMAC Key has not been configured.");
   }
-  if (c.database.connection.host.length == 0 || c.database.connection.database.length == 0 || c.database.connection.user.length == 0){
+  if (c.database.host.length == 0 || c.database.database.length == 0 || c.database.user.length == 0){
     defer.reject("MySQL Database has not been configured."); failed = true;
   }
 
@@ -28,7 +28,7 @@ const initialSetup = function(){
     defer.reject("required file 'data/db/item.db_' is missing"); failed = true;
   }
   if (!fs.existsSync("./data/db/exchange.db_")){
-      defer.reject("required file 'data/db/exchange.db_' is missing"); failed = true;
+    defer.reject("required file 'data/db/exchange.db_' is missing"); failed = true;
   }
   if (!fs.existsSync("./data/db/live_notes.db_")){
     defer.reject("required file 'data/db/live_notes.db_' is missing"); failed = true;

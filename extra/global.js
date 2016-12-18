@@ -10,6 +10,11 @@ const querystring = require("querystring");
 const crypto = require("crypto");
 const sqlite3 = require("sqlite3");
 const chalk = require("chalk");
+const mysql = require("mysql");
+const Database = require("./database.js");
+const promiseMySQL = require("promise-mysql");
+const timeout = require("./timeout.js");
+
 var common;
 const FILES = {
   CONFIG: "./config.json"
@@ -33,8 +38,8 @@ const CONSTANT = {
 
 };
 
-const mysql = require("mysql");
 var database = null;
+var database2 = null;
 
 
 Array.prototype.forEachAsync = function(each){
@@ -62,17 +67,14 @@ const defaultConfig = {
     enable_quick_restart: true
   },
   database: {
-    connection: {
-      host: "",
-      user: "",
-      password: "",
-      database: ""
-    },
-    auto_reconnect: {
-      enabled: true,
-      delay: 1000,
-      max_attempts: 10
-    }
+    autoReconnect: true,
+    autoReconnectDelay: 1000,
+    autoReconnectMaxAttempt: 10,
+    dateStrings: true,
+    host: "",
+    user: "",
+    password: "",
+    database: ""
   },
   log: {
     level: Log.LEVEL.VERBOSE
@@ -90,6 +92,7 @@ const defaultConfig = {
 
   }
 };
+
 const config = {};
 const loadConfig = function () {
   var defer = Q.defer();
@@ -187,6 +190,7 @@ const RequestData = function(headers, formData){
   this.auth_level = CONSTANT.AUTH.NONE;
   this.formData = formData;
 
+
   if (formData && formData.request_data){
     try {
       console.log(formData.request_data);
@@ -221,6 +225,7 @@ const RequestData = function(headers, formData){
     }
     default: {
       if (this.user_id === null && this.authorize_token === null){
+        log.debug(headers);
         defer.resolve(CONSTANT.AUTH.NONE);
         break;
       }
@@ -264,16 +269,11 @@ const RequestData = function(headers, formData){
           }
           defer.resolve(this.auth_level);
         });
-
-
       }
     }
     }
     return defer.promise;
   };
-
-
-
 };
 const timeStamp = function(){
   return Math.floor(Date.now()/1000);
@@ -284,7 +284,7 @@ const writeJsonResponse = function(response,status,object, userData){
   var authorizeHeader = {consumerKey:"lovelive_test", timeStamp: timeStamp(), version: "1.1", requestTimeStamp: timeStamp()};
   if (userData && userData.token) authorizeHeader.token = userData.token;
   response.setHeader("status_code", status);
-  response.setHeader("server-version", "8.0.69");
+  //response.setHeader("server-version", "8.0.69");
   response.setHeader("server_version", "20120129");
   if (userData && userData.user_id) {
     response.setHeader("user_id", userData.user_id);
@@ -394,7 +394,6 @@ const mainRequestHandler = function(request,response, module, action){
     });
   });
 
-
 };
 const httpRequestHandler = function(request,response){
   log.verbose(request.method + " " + request.url);
@@ -419,7 +418,6 @@ const httpRequestHandler = function(request,response){
   }
   writeJsonResponse(response, 400, {error: "Bad Request"});
 };
-
 
 const readLineInterface = readline.createInterface({
   input: process.stdin,
@@ -450,16 +448,8 @@ const initReadLine = function(){
 
     log.warn("Invalid Command");
 
-
-
-
-
   });
 };
-
-
-
-
 
 const createAuthToken = function(token, user, expire){
   if (!AUTH_TOKENS[token]){
@@ -481,59 +471,21 @@ setInterval(function(){
 },5000);
 
 const mysqlConnect = function(){
-  var defer = Q.defer();
-  database = mysql.createConnection(extend(config.database.connection,{dateStrings: true}));
-  database.config.queryFormat = function (query, values) {
-    if (!values) return query;
-    return query.replace(/\:(\w+)/g, function (txt, key) {
-      if (values.hasOwnProperty(key)) {
-        return this.escape(values[key]);
-      }
-      return txt;
-    }.bind(this));
-  };
-
-  database.connect(function(err){
-    if (err){
-      defer.reject(err);
-      return;
-    }
-
-    database.on("error", function(err) {
-      log.error(err.message, "MYSQL");
-
-      var reconnect = function(attempt){
-
-        mysqlConnect().then(function(){
-          log.info("Database Reconnected");
-        }).catch(function(err){
-          if (err){
-            log.error(err.message,"MYSQL");
-            setTimeout(function(){
-              reconnect(attempt+1);
-            }, config.database.auto_reconnect.delay);
-          }
-        });
-      };
-
-      if (config.database.auto_reconnect.enabled){
-        setTimeout(function(){
-          reconnect(1);
-        },config.database.auto_reconnect.delay);
-      }else{
-        log.fatal("Auto-Reconnect is Disabled. Shutting Down Server");
+  return new Promise(function(resolve, reject){
+    database = new Database(extend({
+      logLevel: config.log.level,
+      disconnected: function(){
+        log.fatal("Lost Connection to MySQL Database");
         process.exit(1);
-      }
+      },
+    },config.database));
+    database.connect().then(resolve).catch(function(err){
+      log.error(err.message, "Database");
+      timeout(1000).then(mysqlConnect).then(resolve).catch(function(err){
+        reject(err);
+      });
     });
-
-
-    defer.resolve();
   });
-
-
-
-
-  return defer.promise;
 };
 
 module.exports = {
