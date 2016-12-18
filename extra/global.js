@@ -10,9 +10,7 @@ const querystring = require("querystring");
 const crypto = require("crypto");
 const sqlite3 = require("sqlite3");
 const chalk = require("chalk");
-const mysql = require("mysql");
 const Database = require("./database.js");
-const promiseMySQL = require("promise-mysql");
 const timeout = require("./timeout.js");
 
 var common;
